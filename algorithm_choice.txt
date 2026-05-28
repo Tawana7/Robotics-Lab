@@ -1,0 +1,4 @@
+RRT was chosen because of single query efficiency. RRT builds a map from the start to the goal, 
+instead of building a full global map first, which saves computation time. Since the global map is a simple
+1000x1000 grid, it need not be built using PRM algorithms. It also avoids creating a large network of waypoints,
+since the only relevant way points in this scenario are the ones that get you from the start to the goal.
