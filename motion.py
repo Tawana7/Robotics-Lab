@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+
+#Students
+#2680747 - Gopolang Mohlakola
+#2588206 - Tawananyasha Kadango
+
+# Testing on a 1000 x 1000 obstacle grid; RTT provides stochastic sampling
 import numpy as np
 import random
 import math
@@ -6,191 +12,195 @@ import sys
 
 class RRTNode:
     def __init__(self, x, y, parent=None):
-        self.x = x
-        self.y = y
-        self.parent = parent
+        self.x= x
+        self.y= y
+        self.parent= parent
 
-def main():
-    # Read input line by line until -1 terminator
-    lines = []
-    for line in sys.stdin:
-        line = line.strip()
-        lines.append(line)
-        if line == "-1":
+def read_in_input():
+    lines= []
+    while True:
+        try:
+            line =input().strip()
+            lines.append(line)
+            if line== '-1':
+                break
+        except EOFError:
             break
-    
+    return lines
+
+def format_input(lines):
     if not lines:
-        return
+        return None, None, None
     
-    points_str = lines[0]
-    points = [[float(x) for x in pair.split(",")] for pair in points_str.split(";")]
-    start = points[0]
-    goal = points[1]
+    start_goal =lines[0].split(';')
+    start =[float(x) for x in start_goal[0].split(',')]
+    goal =[float(x) for x in start_goal[1].split(',')]
     
-    obstacles_raw = []
-    for line in lines[1:]:
-        if line.strip() == "-1":
-            break
-        p1, p2 = line.split(";")
-        x1, y1 = [float(x) for x in p1.split(",")]
-        x2, y2 = [float(x) for x in p2.split(",")]
+    obstacles_raw =[]
+    for line in lines[1:-1]:
+        if not line or line == '-1':
+            continue
+        p1, p2 =line.split(';')
+        x1, y1 =[float(x) for x in p1.split(',')]
+        x2, y2 = [float(x) for x in p2.split(',')]
         obstacles_raw.append((x1, y1, x2, y2))
     
-    grid = np.zeros((1000, 1000))
+    return start,goal,obstacles_raw
+
+def mark_obstacles(grid, obstacles_raw):
+    for (x1,y1,x2,y2) in obstacles_raw:
+        x_min =int(min(x1, x2))
+        x_max=int(max(x1, x2))
+        y_min = int(min(y1, y2))
+        y_max = int(max(y1, y2))
+        
+        expansion =2
+        x_min=max(0,x_min-expansion)
+        x_max =min(999, x_max+expansion)
+        y_min = max(0, y_min-expansion)
+        y_max =min(999, y_max + expansion)
+        
+        
+        for x in range(x_min,x_max + 1):
+            for y in range(y_min,y_max +1):
+                grid[x][y] =1
+
+def bool_free_from_collision(x1,y1,x2, y2, grid):
+    x1,y1 =int(round(x1)),int(round(y1))
+    x2,y2 =int(round(x2)),int(round(y2))
     
-    def mark_obstacles(grid, obstacles_raw):
-        for (x1, y1, x2, y2) in obstacles_raw:
-            x_min = int(min(x1, x2))
-            x_max = int(max(x1, x2))
-            y_min = int(min(y1, y2))
-            y_max = int(max(y1, y2))
-            
-            # Give thickness to line obstacles
-            if x_min == x_max:  # Vertical line
-                x_min = max(0, x_min - 1)
-                x_max = min(999, x_max + 1)
-            if y_min == y_max:  # Horizontal line
-                y_min = max(0, y_min - 1)
-                y_max = min(999, y_max + 1)
-            
-            for x in range(x_min, x_max + 1):
-                for y in range(y_min, y_max + 1):
-                    if 0 <= x < 1000 and 0 <= y < 1000:
-                        grid[x][y] = 1
+    dx=abs(x2-x1)
+    dy =abs(y2-y1)
+    sx =1 if x1<x2 else -1
+    sy =1 if y1<y2 else -1
+    err= dx-dy
+
+    x, y =x1, y1
+    while True:
+        #Bresenham algorith: between 2 points in a grid, check if theres an obstacle between them
+        # acccomodates for squeeze throughs
+        if not (0 <= x<1000 and 0 <=y<1000):
+            return False
+        if grid[x][y] ==1:
+            return False
+        if x == x2 and y == y2:
+            break
+        e2 = 2*err
+        if e2 >-dy:
+            err-=dy
+            x+=sx
+        if e2<dx:
+            err+=dx
+            y+=sy
+    return True
+
+def smooth_path(path,grid):
+    if len(path)<=2:
+        return path
     
+    smoothed =[path[0]]
+    current = 0
+    
+    while current< len(path)-1:
+        for i in range(len(path)-1,current,-1):
+            if bool_free_from_collision(path[current][0],path[current][1],path[i][0], path[i][1], grid):
+                smoothed.append(path[i])
+                current = i
+                break
+    
+    return smoothed
+
+def find_waypoints(grid,start,goal,step_size=15.0,max_iter=80000):
+    tree =[RRTNode(start[0],start[1])]
+    
+    #create sampling points in the grid to traverse in a tree-like manner while avoiding obstacles
+    for i in range(max_iter):
+        if random.random()< 0.2:
+            x_rand, y_rand = goal[0], goal[1]
+        else:
+            x_rand =random.uniform(0,999)
+            y_rand =random.uniform(0,999)
+        
+        #The RTT algo: move towards random sampled point in the direction to the goal, by increments of step_size
+        nearest_node = min(tree,key=lambda node: math.hypot(node.x -x_rand, node.y - y_rand))
+        
+        #Calc the angle of traversal, then move towards the next sampled point in a direction specified by the angle
+        angle =math.atan2(y_rand -nearest_node.y,x_rand -nearest_node.x)
+        x_new =nearest_node.x + step_size*math.cos(angle)
+        y_new = nearest_node.y+ step_size*math.sin(angle)
+        
+        x_new = max(0,min(999,x_new))
+        y_new = max(0,min(999,y_new))
+        
+        if bool_free_from_collision(nearest_node.x, nearest_node.y, x_new, y_new, grid):
+            new_node =RRTNode(x_new,y_new,parent=nearest_node)
+            tree.append(new_node)
+            
+            #check if we have reached goal node, if not continue sampling
+            if math.hypot(new_node.x-goal[0], new_node.y-goal[1]) <=step_size:
+                if bool_free_from_collision(new_node.x, new_node.y, goal[0], goal[1], grid):
+                    path =[]
+                    curr =new_node
+                    while curr is not None:
+                        path.append((curr.x,curr.y))
+                        curr= curr.parent
+                    path.reverse()
+                    path.append((goal[0], goal[1]))
+                    
+                   #smooth the planned path around obstacles (avoids erratic behaviour of rrt sampling)
+                    path =smooth_path(path, grid)
+                    
+                    int_path =[]
+                    for x, y in path:
+                        ix, iy =int(round(x)),int(round(y))
+                        if not int_path or (int_path[-1][0] != ix or int_path[-1][1] != iy):
+                            int_path.append((ix, iy))
+                    
+                    #removes redundant points in sampling (very small incremental points are not very important)
+                    if len(int_path)> 2:
+                        filtered= [int_path[0]]
+                        for i in range(1, len(int_path) - 1):
+                            prev= filtered[-1]
+                            curr= int_path[i]
+                            nxt = int_path[i+ 1]
+                        
+                            cross =abs((curr[0]-prev[0])*(nxt[1]-curr[1])-(curr[1] - prev[1]) * (nxt[0] - curr[0]))
+                            
+                            if cross>0.5:
+                                filtered.append(curr)
+                        filtered.append(int_path[-1])
+                        int_path = filtered
+                    
+                    return int_path
+    
+    return None
+
+def main():
+    lines =read_in_input()
+    
+    start,goal,obstacles_raw =format_input(lines)
+    
+    if start is None:
+        print("Error: Start coordinate not read")
+        sys.exit(1)
+    
+    # Initialise the obstacle grid,this is a 1000x1000 grid
+    grid= np.zeros((1000,1000))
     mark_obstacles(grid, obstacles_raw)
     
-    def is_collision_free(x1, y1, x2, y2, grid):
-        x1, y1 = int(round(x1)), int(round(y1))
-        x2, y2 = int(round(x2)), int(round(y2))
-        
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        sx = 1 if x1 < x2 else -1
-        sy = 1 if y1 < y2 else -1
-        err = dx - dy
-        
-        x, y = x1, y1
-        while True:
-            if not (0 <= x < 1000 and 0 <= y < 1000):
-                return False
-            if grid[x][y] == 1:
-                return False
-            if x == x2 and y == y2:
-                break
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x += sx
-            if e2 < dx:
-                err += dx
-                y += sy
-        return True
+    #Run RRT 10 times and sample our best path wavepoints
+    best_path =None
+    for i in range(10):
+        result = find_waypoints(grid, start, goal, step_size=15.0, max_iter=80000)
+        if result:
+            best_path = result
+            break
     
-    def smooth_path(path, grid):
-        if len(path) <= 2:
-            return path
-        
-        smoothed = [path[0]]
-        current = 0
-        
-        while current < len(path) - 1:
-            for i in range(len(path) - 1, current, -1):
-                if is_collision_free(path[current][0], path[current][1],
-                                   path[i][0], path[i][1], grid):
-                    smoothed.append(path[i])
-                    current = i
-                    break
-        
-        return smoothed
-    
-    def find_waypoints(grid, start, goal, step_size=12.0, max_iter=60000):
-        tree = [RRTNode(start[0], start[1])]
-        
-        # Target waypoints to guide sampling
-        waypoint_targets = [(10, 51), (91, 51), (91, 30)]
-        
-        for iteration in range(max_iter):
-            # Multi-stage sampling biased toward waypoints
-            r = random.random()
-            if r < 0.20:  # Direct goal bias
-                x_rand, y_rand = goal[0], goal[1]
-            elif r < 0.40:  # Bias toward first waypoint (10,51)
-                x_rand, y_rand = 10, 51
-            elif r < 0.60:  # Bias toward second waypoint (91,51)
-                x_rand, y_rand = 91, 51
-            elif r < 0.80:  # Bias toward third waypoint (91,30)
-                x_rand, y_rand = 91, 30
-            else:  # Random exploration
-                x_rand = random.uniform(0, 999)
-                y_rand = random.uniform(0, 999)
-            
-            nearest_node = min(tree, key=lambda node: math.hypot(node.x - x_rand, node.y - y_rand))
-            
-            angle = math.atan2(y_rand - nearest_node.y, x_rand - nearest_node.x)
-            x_new = nearest_node.x + step_size * math.cos(angle)
-            y_new = nearest_node.y + step_size * math.sin(angle)
-            
-            x_new = max(0, min(999, x_new))
-            y_new = max(0, min(999, y_new))
-            
-            if is_collision_free(nearest_node.x, nearest_node.y, x_new, y_new, grid):
-                new_node = RRTNode(x_new, y_new, parent=nearest_node)
-                tree.append(new_node)
-                
-                if math.hypot(new_node.x - goal[0], new_node.y - goal[1]) <= step_size:
-                    if is_collision_free(new_node.x, new_node.y, goal[0], goal[1], grid):
-                        path = []
-                        curr = new_node
-                        while curr is not None:
-                            path.append((curr.x, curr.y))
-                            curr = curr.parent
-                        path.reverse()
-                        path.append((goal[0], goal[1]))
-                        
-                        path = smooth_path(path, grid)
-                        
-                        int_path = []
-                        for x, y in path:
-                            ix, iy = int(round(x)), int(round(y))
-                            if not int_path or (int_path[-1][0] != ix or int_path[-1][1] != iy):
-                                int_path.append((ix, iy))
-                        
-                        # Snap to expected waypoints
-                        expected = [(int(start[0]), int(start[1])), (10, 51), (91, 51), (91, 30), (int(goal[0]), int(goal[1]))]
-                        
-                        # Build final path with expected waypoints
-                        final_path = []
-                        for ex, ey in expected:
-                            # Find closest point in path to this waypoint
-                            min_dist = float('inf')
-                            closest = (ex, ey)
-                            for px, py in int_path:
-                                d = math.hypot(px - ex, py - ey)
-                                if d < min_dist and d < 15:
-                                    min_dist = d
-                                    closest = (px, py)
-                            if not final_path or final_path[-1] != closest:
-                                final_path.append(closest)
-                        
-                        return final_path
-        
-        return None
-    
-    # Run with fixed seed for deterministic output
-    random.seed(42)
-    result = find_waypoints(grid, start, goal, step_size=12.0, max_iter=60000)
-    
-    if result:
-        for wp in result:
-            print("{},{}".format(wp[0], wp[1]))
+    if best_path:
+        for wave_point in best_path:
+            print("{},{}".format(wave_point[0],wave_point[1]))
     else:
-        # Fallback to expected output
-        print("10,10")
-        print("10,51")
-        print("91,51")
-        print("91,30")
-        print("80,30")
+        print("No path found", file=sys.stderr)
+        sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+main()
