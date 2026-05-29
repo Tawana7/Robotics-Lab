@@ -4,6 +4,15 @@
 #2680747 - Gopolang Mohlakola
 #2588206 - Tawananyasha Kadango
 
+"""
+RRT was chosen because of single query efficiency. RRT builds a map from the start to the goal, 
+instead of building a full global map first, which saves computation time. Since the global map is a simple
+1000x1000 grid, it need not be built using PRM algorithms. It also avoids creating a large network of waypoints,
+since the only relevant way points in this scenario are the ones that get you from the start to the goal.
+
+Note that RTT uses a sampling strategy so it will generate a new wavepoints each run, and these are valid 
+traversals towards the goal.
+"""
 # Testing on a 1000 x 1000 obstacle grid; RTT provides stochastic sampling
 import numpy as np
 import random
